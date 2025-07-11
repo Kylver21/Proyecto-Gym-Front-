@@ -74,9 +74,12 @@ const Navbar: React.FC = () => {
                 <LogOut className="h-5 w-5" />
               </button>
             </div>
-          </div>
+          </div>'Navbar' is declared but its value is never read.ts(6133)
+
         </div>
       </div>
     </nav>
   );
 };
+
+export default Navbar;
