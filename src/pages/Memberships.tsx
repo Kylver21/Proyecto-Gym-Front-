@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Membership } from '../types';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { GymApiService } from '../services/api';
+import { Plus, Edit, Trash2, Search, Calendar, DollarSign } from 'lucide-react';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import ErrorMessage from '../components/Common/ErrorMessage';
 import ConfirmDialog from '../components/Common/ConfirmDialog';
@@ -23,9 +24,10 @@ const Memberships: React.FC = () => {
   });
 
   const [formData, setFormData] = useState({
-    tipo: '',
+    tipo: 'MENSUAL' as 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL',
     descripcion: '',
     precio: '',
+    duracionDias: '',
   });
 
   useEffect(() => {
@@ -36,36 +38,8 @@ const Memberships: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Mock data - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const mockMemberships: Membership[] = [
-        {
-          id: 1,
-          tipo: 'Básica',
-          descripcion: 'Acceso al gimnasio en horarios regulares',
-          precio: 35.00
-        },
-        {
-          id: 2,
-          tipo: 'Premium',
-          descripcion: 'Acceso completo + clases grupales',
-          precio: 55.00
-        },
-        {
-          id: 3,
-          tipo: 'VIP',
-          descripcion: 'Acceso completo + entrenador personal',
-          precio: 85.00
-        },
-        {
-          id: 4,
-          tipo: 'Anual',
-          descripcion: 'Membresía anual con descuento',
-          precio: 600.00
-        }
-      ];
-      setMemberships(mockMemberships);
+      const memberships = await GymApiService.getMemberships();
+      setMemberships(memberships);
     } catch (err) {
       setError('Error al cargar las membresías');
       console.error('Error fetching memberships:', err);
@@ -77,23 +51,25 @@ const Memberships: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setLoading(true);
+      setError(null);
+      
       const membershipData = {
-        ...formData,
+        tipo: formData.tipo,
+        descripcion: formData.descripcion,
         precio: parseFloat(formData.precio),
+        duracionDias: parseInt(formData.duracionDias),
       };
 
       if (editingMembership) {
         // Update membership
-        const updatedMembership = { ...editingMembership, ...membershipData };
+        const updatedMembership = await GymApiService.updateMembership(editingMembership.id, membershipData);
         setMemberships(memberships.map(membership => 
           membership.id === editingMembership.id ? updatedMembership : membership
         ));
       } else {
         // Create new membership
-        const newMembership: Membership = {
-          id: Math.max(...memberships.map(m => m.id)) + 1,
-          ...membershipData,
-        };
+        const newMembership = await GymApiService.createMembership(membershipData);
         setMemberships([...memberships, newMembership]);
       }
       
@@ -101,6 +77,8 @@ const Memberships: React.FC = () => {
     } catch (err) {
       setError('Error al guardar la membresía');
       console.error('Error saving membership:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -110,6 +88,7 @@ const Memberships: React.FC = () => {
       tipo: membership.tipo,
       descripcion: membership.descripcion,
       precio: membership.precio.toString(),
+      duracionDias: membership.duracionDias.toString(),
     });
     setShowForm(true);
   };
@@ -125,20 +104,25 @@ const Memberships: React.FC = () => {
   const confirmDelete = async () => {
     if (confirmDialog.membershipId) {
       try {
+        setLoading(true);
+        await GymApiService.deleteMembership(confirmDialog.membershipId);
         setMemberships(memberships.filter(membership => membership.id !== confirmDialog.membershipId));
         setConfirmDialog({ isOpen: false, membershipId: null, membershipName: '' });
       } catch (err) {
         setError('Error al eliminar la membresía');
         console.error('Error deleting membership:', err);
+      } finally {
+        setLoading(false);
       }
     }
   };
 
   const resetForm = () => {
     setFormData({
-      tipo: '',
+      tipo: 'MENSUAL',
       descripcion: '',
       precio: '',
+      duracionDias: '',
     });
     setEditingMembership(null);
     setShowForm(false);
@@ -149,7 +133,17 @@ const Memberships: React.FC = () => {
     membership.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) {
+  const getTypeColor = (tipo: string) => {
+    const colors = {
+      MENSUAL: 'bg-blue-100 text-blue-800',
+      TRIMESTRAL: 'bg-green-100 text-green-800',
+      SEMESTRAL: 'bg-yellow-100 text-yellow-800',
+      ANUAL: 'bg-purple-100 text-purple-800',
+    };
+    return colors[tipo as keyof typeof colors] || 'bg-gray-100 text-gray-800';
+  };
+
+  if (loading && memberships.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
         <LoadingSpinner size="lg" />
@@ -191,30 +185,50 @@ const Memberships: React.FC = () => {
         {filteredMemberships.map((membership) => (
           <div key={membership.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-gray-900">{membership.tipo}</h3>
+              <div className="flex items-center space-x-2">
+                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeColor(membership.tipo)}`}>
+                  {membership.tipo}
+                </span>
+                {!membership.estado && (
+                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                    Inactiva
+                  </span>
+                )}
+              </div>
               <div className="flex space-x-2">
                 <button
                   onClick={() => handleEdit(membership)}
                   className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                  title="Editar membresía"
                 >
                   <Edit className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => handleDelete(membership)}
                   className="text-red-600 hover:text-red-900 p-1 rounded"
+                  title="Eliminar membresía"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
             
-            <p className="text-gray-600 mb-4">{membership.descripcion}</p>
+            <p className="text-gray-600 mb-4 text-sm">{membership.descripcion}</p>
             
-            <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold text-blue-600">
-                ${membership.precio.toFixed(2)}
-              </span>
-              <span className="text-sm text-gray-500">por mes</span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-1">
+                  <DollarSign className="h-4 w-4 text-green-600" />
+                  <span className="text-2xl font-bold text-green-600">
+                    ${membership.precio.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-1 text-sm text-gray-500">
+                <Calendar className="h-4 w-4" />
+                <span>{membership.duracionDias} días de duración</span>
+              </div>
             </div>
           </div>
         ))}
@@ -231,21 +245,24 @@ const Memberships: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo
+                  Tipo *
                 </label>
-                <input
-                  type="text"
+                <select
                   required
                   value={formData.tipo}
-                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value as any })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Ej: Básica, Premium, VIP"
-                />
+                >
+                  <option value="MENSUAL">Mensual</option>
+                  <option value="TRIMESTRAL">Trimestral</option>
+                  <option value="SEMESTRAL">Semestral</option>
+                  <option value="ANUAL">Anual</option>
+                </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción
+                  Descripción *
                 </label>
                 <textarea
                   required
@@ -259,7 +276,7 @@ const Memberships: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio (USD)
+                  Precio (USD) *
                 </label>
                 <input
                   type="number"
@@ -269,7 +286,22 @@ const Memberships: React.FC = () => {
                   value={formData.precio}
                   onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="35.00"
+                  placeholder="100.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duración (días) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  value={formData.duracionDias}
+                  onChange={(e) => setFormData({ ...formData, duracionDias: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="30"
                 />
               </div>
 
@@ -283,9 +315,10 @@ const Memberships: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {editingMembership ? 'Actualizar' : 'Crear'}
+                  {loading ? 'Guardando...' : (editingMembership ? 'Actualizar' : 'Crear')}
                 </button>
               </div>
             </form>
@@ -305,5 +338,3 @@ const Memberships: React.FC = () => {
     </div>
   );
 };
-
-export default Memberships;

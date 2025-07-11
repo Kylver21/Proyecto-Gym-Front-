@@ -16,43 +16,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Verificar si el usuario está autenticado al cargar la aplicación
+  // Verificar autenticación al cargar la aplicación
   useEffect(() => {
-    const userData = localStorage.getItem('userData');
-    
-    if (userData) {
-      try {
-        const parsedUser = JSON.parse(userData) as User;
-        setUser(parsedUser);
-      } catch (error) {
-        console.error('Error al analizar los datos del usuario:', error);
-        handleLogout();
-      }
-    }
-    setLoading(false);
+    checkAuthStatus();
   }, []);
 
-  // Función para iniciar sesión
+  const checkAuthStatus = async () => {
+    try {
+      // Primero verificar si hay datos en localStorage
+      const userData = localStorage.getItem('userData');
+      
+      if (userData) {
+        try {
+          const parsedUser = JSON.parse(userData) as User;
+          
+          // Verificar con el servidor si la sesión sigue activa
+          const authCheck = await GymApiService.checkAuth();
+          
+          if (authCheck.authenticated && authCheck.user) {
+            setUser(authCheck.user);
+            // Actualizar localStorage con datos frescos
+            localStorage.setItem('userData', JSON.stringify(authCheck.user));
+          } else {
+            // Sesión expirada, limpiar datos
+            handleLogout();
+          }
+        } catch (error) {
+          console.error('Error al verificar datos del usuario:', error);
+          handleLogout();
+        }
+      } else {
+        // No hay datos en localStorage, verificar con el servidor
+        const authCheck = await GymApiService.checkAuth();
+        
+        if (authCheck.authenticated && authCheck.user) {
+          setUser(authCheck.user);
+          localStorage.setItem('userData', JSON.stringify(authCheck.user));
+        }
+      }
+    } catch (error) {
+      console.error('Error al verificar autenticación:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkAuth = async (): Promise<void> => {
+    await checkAuthStatus();
+  };
+
   const login = async (username: string, password: string): Promise<LoginResult> => {
     try {
       const result = await GymApiService.login(username, password);
       
       if (result.success && result.user) {
-        const userData = result.user;
-        setUser(userData);
-        localStorage.setItem('userData', JSON.stringify(userData));
-        console.log('Usuario autenticado:', userData);
-        return { 
-          success: true, 
-          message: 'Inicio de sesión exitoso',
-          user: userData
-        };
+        setUser(result.user);
+        console.log('Usuario autenticado:', result.user);
+        return result;
       }
       
-      return { 
-        success: false, 
-        message: result.message || 'Error al iniciar sesión. Por favor, intente nuevamente.'
-      };
+      return result;
     } catch (error) {
       console.error('Error al iniciar sesión:', error);
       return { 
@@ -62,18 +85,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Función para cerrar sesión
-  const handleLogout = () => {
-    setUser(null);
-    GymApiService.logout();
+  const handleLogout = async () => {
+    try {
+      await GymApiService.logout();
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('userData');
+    }
   };
 
   const value: AuthContextType = {
     user,
     login,
     logout: handleLogout,
+    checkAuth,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'ADMIN',
+    isAdmin: user?.rol === 'ADMIN',
+    isEmployee: user?.rol === 'EMPLEADO',
+    isClient: user?.rol === 'CLIENTE',
   };
 
   if (loading) {

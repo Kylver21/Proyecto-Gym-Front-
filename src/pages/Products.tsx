@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Product } from '../types';
-import { Plus, Edit, Trash2, Search, Package } from 'lucide-react';
+import { GymApiService } from '../services/api';
+import { Plus, Edit, Trash2, Search, Package, AlertTriangle } from 'lucide-react';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import ErrorMessage from '../components/Common/ErrorMessage';
 import ConfirmDialog from '../components/Common/ConfirmDialog';
@@ -37,47 +38,8 @@ const Products: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Mock data - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const mockProducts: Product[] = [
-        {
-          id: 1,
-          nombre: 'Proteína Whey',
-          descripcion: 'Suplemento proteico de alta calidad',
-          precio: 45.00,
-          stock: 25
-        },
-        {
-          id: 2,
-          nombre: 'Creatina',
-          descripcion: 'Creatina monohidrato para rendimiento',
-          precio: 25.00,
-          stock: 15
-        },
-        {
-          id: 3,
-          nombre: 'BCAA',
-          descripcion: 'Aminoácidos de cadena ramificada',
-          precio: 35.00,
-          stock: 20
-        },
-        {
-          id: 4,
-          nombre: 'Pre-entreno',
-          descripcion: 'Suplemento pre-entreno con cafeína',
-          precio: 30.00,
-          stock: 10
-        },
-        {
-          id: 5,
-          nombre: 'Multivitamínico',
-          descripcion: 'Complejo vitamínico y mineral',
-          precio: 20.00,
-          stock: 30
-        }
-      ];
-      setProducts(mockProducts);
+      const products = await GymApiService.getProducts();
+      setProducts(products);
     } catch (err) {
       setError('Error al cargar los productos');
       console.error('Error fetching products:', err);
@@ -89,24 +51,25 @@ const Products: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setLoading(true);
+      setError(null);
+      
       const productData = {
-        ...formData,
+        nombre: formData.nombre,
+        descripcion: formData.descripcion,
         precio: parseFloat(formData.precio),
         stock: parseInt(formData.stock),
       };
 
       if (editingProduct) {
         // Update product
-        const updatedProduct = { ...editingProduct, ...productData };
+        const updatedProduct = await GymApiService.updateProduct(editingProduct.id, productData);
         setProducts(products.map(product => 
           product.id === editingProduct.id ? updatedProduct : product
         ));
       } else {
         // Create new product
-        const newProduct: Product = {
-          id: Math.max(...products.map(p => p.id)) + 1,
-          ...productData,
-        };
+        const newProduct = await GymApiService.createProduct(productData);
         setProducts([...products, newProduct]);
       }
       
@@ -114,6 +77,8 @@ const Products: React.FC = () => {
     } catch (err) {
       setError('Error al guardar el producto');
       console.error('Error saving product:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -139,11 +104,15 @@ const Products: React.FC = () => {
   const confirmDelete = async () => {
     if (confirmDialog.productId) {
       try {
+        setLoading(true);
+        await GymApiService.deleteProduct(confirmDialog.productId);
         setProducts(products.filter(product => product.id !== confirmDialog.productId));
         setConfirmDialog({ isOpen: false, productId: null, productName: '' });
       } catch (err) {
         setError('Error al eliminar el producto');
         console.error('Error deleting product:', err);
+      } finally {
+        setLoading(false);
       }
     }
   };
@@ -164,7 +133,17 @@ const Products: React.FC = () => {
     product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) {
+  const getStockStatus = (stock: number) => {
+    if (stock === 0) {
+      return { color: 'bg-red-100 text-red-800', text: 'Sin stock', icon: AlertTriangle };
+    } else if (stock <= 5) {
+      return { color: 'bg-yellow-100 text-yellow-800', text: 'Stock bajo', icon: AlertTriangle };
+    } else {
+      return { color: 'bg-green-100 text-green-800', text: 'En stock', icon: Package };
+    }
+  };
+
+  if (loading && products.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
         <LoadingSpinner size="lg" />
@@ -203,49 +182,64 @@ const Products: React.FC = () => {
 
       {/* Products Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map((product) => (
-          <div key={product.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Package className="h-6 w-6 text-blue-600" />
+        {filteredProducts.map((product) => {
+          const stockStatus = getStockStatus(product.stock);
+          const StockIcon = stockStatus.icon;
+          
+          return (
+            <div key={product.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Package className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">{product.nombre}</h3>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900">{product.nombre}</h3>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleEdit(product)}
+                    className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                    title="Editar producto"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(product)}
+                    className="text-red-600 hover:text-red-900 p-1 rounded"
+                    title="Eliminar producto"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleEdit(product)}
-                  className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                >
-                  <Edit className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(product)}
-                  className="text-red-600 hover:text-red-900 p-1 rounded"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+              
+              <p className="text-gray-600 mb-4 text-sm">{product.descripcion}</p>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl font-bold text-green-600">
+                    ${product.precio.toFixed(2)}
+                  </span>
+                  {!product.estado && (
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                      Inactivo
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${stockStatus.color}`}>
+                    <StockIcon className="h-3 w-3 mr-1" />
+                    {stockStatus.text}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    Cantidad: {product.stock}
+                  </span>
+                </div>
               </div>
             </div>
-            
-            <p className="text-gray-600 mb-4">{product.descripcion}</p>
-            
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-2xl font-bold text-green-600">
-                ${product.precio.toFixed(2)}
-              </span>
-              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                product.stock > 10 
-                  ? 'bg-green-100 text-green-800' 
-                  : product.stock > 0 
-                  ? 'bg-yellow-100 text-yellow-800'
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                Stock: {product.stock}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Product Form Modal */}
@@ -259,7 +253,7 @@ const Products: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre
+                  Nombre *
                 </label>
                 <input
                   type="text"
@@ -273,7 +267,7 @@ const Products: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Descripción
+                  Descripción *
                 </label>
                 <textarea
                   required
@@ -287,7 +281,7 @@ const Products: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Precio (USD)
+                  Precio (USD) *
                 </label>
                 <input
                   type="number"
@@ -303,7 +297,7 @@ const Products: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Stock
+                  Stock *
                 </label>
                 <input
                   type="number"
@@ -326,9 +320,10 @@ const Products: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {editingProduct ? 'Actualizar' : 'Crear'}
+                  {loading ? 'Guardando...' : (editingProduct ? 'Actualizar' : 'Crear')}
                 </button>
               </div>
             </form>
@@ -348,5 +343,3 @@ const Products: React.FC = () => {
     </div>
   );
 };
-
-export default Products;

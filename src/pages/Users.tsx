@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { GymApiService } from '../services/api';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, UserCheck, UserX } from 'lucide-react';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import ErrorMessage from '../components/Common/ErrorMessage';
 import ConfirmDialog from '../components/Common/ConfirmDialog';
@@ -27,7 +27,9 @@ const Users: React.FC = () => {
     username: '',
     password: '',
     nombre: '',
+    apellido: '',
     email: '',
+    rol: 'CLIENTE' as 'ADMIN' | 'EMPLEADO' | 'CLIENTE',
   });
 
   useEffect(() => {
@@ -53,21 +55,21 @@ const Users: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      
       if (editingUser) {
         // Actualizar usuario
-        const updatedUser = await GymApiService.updateUser(editingUser.id, {
+        const updateData = {
           ...formData,
           password: formData.password || undefined, // No enviar password vacío
-        });
+        };
+        const updatedUser = await GymApiService.updateUser(editingUser.id, updateData);
         setUsers(users.map(user => user.id === editingUser.id ? updatedUser : user));
       } else {
         // Crear usuario
-        const newUser = await GymApiService.createUser({
-          ...formData,
-          role: 'USER',
-        });
+        const newUser = await GymApiService.createUser(formData);
         setUsers([...users, newUser]);
       }
+      
       resetForm();
     } catch (err) {
       setError('Error al guardar el usuario');
@@ -83,7 +85,9 @@ const Users: React.FC = () => {
       username: user.username,
       password: '',
       nombre: user.nombre,
+      apellido: user.apellido,
       email: user.email,
+      rol: user.rol,
     });
     setShowForm(true);
   };
@@ -92,7 +96,7 @@ const Users: React.FC = () => {
     setConfirmDialog({
       isOpen: true,
       userId: user.id,
-      userName: user.nombre,
+      userName: `${user.nombre} ${user.apellido}`,
     });
   };
 
@@ -117,7 +121,9 @@ const Users: React.FC = () => {
       username: '',
       password: '',
       nombre: '',
+      apellido: '',
       email: '',
+      rol: 'CLIENTE',
     });
     setEditingUser(null);
     setShowForm(false);
@@ -125,11 +131,21 @@ const Users: React.FC = () => {
 
   const filteredUsers = users.filter(user =>
     user.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.apellido.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) {
+  const getRoleBadge = (rol: string) => {
+    const styles = {
+      ADMIN: 'bg-red-100 text-red-800',
+      EMPLEADO: 'bg-blue-100 text-blue-800',
+      CLIENTE: 'bg-green-100 text-green-800',
+    };
+    return styles[rol as keyof typeof styles] || 'bg-gray-100 text-gray-800';
+  };
+
+  if (loading && users.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
         <LoadingSpinner size="lg" />
@@ -176,13 +192,16 @@ const Users: React.FC = () => {
                   Usuario
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nombre
+                  Nombre Completo
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Email
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Rol
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Estado
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Acciones
@@ -193,33 +212,46 @@ const Users: React.FC = () => {
               {filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-gray-900">{user.username}</div>
+                    <div className="font-medium text-gray-900">@{user.username}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-gray-900">{user.nombre}</div>
+                    <div className="text-gray-900">{user.nombre} {user.apellido}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-gray-900">{user.email}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      user.role === 'ADMIN' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {user.role}
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(user.rol)}`}>
+                      {user.rol}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      {user.estado ? (
+                        <>
+                          <UserCheck className="h-4 w-4 text-green-500 mr-1" />
+                          <span className="text-green-700 text-sm">Activo</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserX className="h-4 w-4 text-red-500 mr-1" />
+                          <span className="text-red-700 text-sm">Inactivo</span>
+                        </>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                     <button
                       onClick={() => handleEdit(user)}
                       className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                      title="Editar usuario"
                     >
                       <Edit className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(user)}
                       className="text-red-600 hover:text-red-900 p-1 rounded"
+                      title="Eliminar usuario"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -234,7 +266,7 @@ const Users: React.FC = () => {
       {/* User Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               {editingUser ? 'Editar Usuario' : 'Agregar Usuario'}
             </h3>
@@ -242,7 +274,7 @@ const Users: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Usuario
+                  Usuario *
                 </label>
                 <input
                   type="text"
@@ -250,6 +282,7 @@ const Users: React.FC = () => {
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Nombre de usuario único"
                 />
               </div>
 
@@ -263,12 +296,13 @@ const Users: React.FC = () => {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Contraseña segura"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre
+                  Nombre *
                 </label>
                 <input
                   type="text"
@@ -276,12 +310,27 @@ const Users: React.FC = () => {
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Nombre"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
+                  Apellido *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.apellido}
+                  onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Apellido"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email *
                 </label>
                 <input
                   type="email"
@@ -289,7 +338,24 @@ const Users: React.FC = () => {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="correo@ejemplo.com"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rol *
+                </label>
+                <select
+                  required
+                  value={formData.rol}
+                  onChange={(e) => setFormData({ ...formData, rol: e.target.value as 'ADMIN' | 'EMPLEADO' | 'CLIENTE' })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="CLIENTE">Cliente</option>
+                  <option value="EMPLEADO">Empleado</option>
+                  <option value="ADMIN">Administrador</option>
+                </select>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
@@ -302,9 +368,10 @@ const Users: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {editingUser ? 'Actualizar' : 'Crear'}
+                  {loading ? 'Guardando...' : (editingUser ? 'Actualizar' : 'Crear')}
                 </button>
               </div>
             </form>
@@ -324,5 +391,3 @@ const Users: React.FC = () => {
     </div>
   );
 };
-
-export default Users;
