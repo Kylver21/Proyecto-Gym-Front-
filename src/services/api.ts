@@ -5,9 +5,16 @@ import type {
   MembershipRegistration,
   Payment,
   Product,
-  ApiResponse,
+  LoginRequest,
   LoginResponse,
-  LoginResult
+  AuthCheckResponse,
+  LoginResult,
+  CreateUserRequest,
+  UpdateUserRequest,
+  CreateMembershipRequest,
+  CreateMembershipRegistrationRequest,
+  CreatePaymentRequest,
+  CreateProductRequest
 } from '../types';
 
 const API_BASE_URL = 'http://localhost:8080/api';
@@ -28,25 +35,26 @@ api.interceptors.response.use(
   response => response,
   error => {
     if (error.response && error.response.status === 401) {
-      // Redirigir a login si no está autenticado
-      window.location.href = '/login';
+      // Limpiar datos de autenticación y redirigir
+      localStorage.removeItem('userData');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
 );
 
-// Función simple para manejar errores
+// Función para manejar errores de API
 const handleApiError = (error: any): never => {
   console.error('Error en la petición:', error);
   
   let errorMessage = 'Error de conexión con el servidor';
   
   if (error.response) {
-    // El servidor respondió con un código de estado fuera del rango 2xx
     const { status, data } = error.response;
     errorMessage = data?.message || `Error del servidor: ${status}`;
   } else if (error.request) {
-    // La petición fue hecha pero no se recibió respuesta
     errorMessage = 'No se pudo conectar con el servidor';
   }
   
@@ -54,42 +62,35 @@ const handleApiError = (error: any): never => {
 };
 
 export class GymApiService {
-  // --- Auth ---
+  // --- Autenticación ---
   static async login(username: string, password: string): Promise<LoginResult> {
     try {
       console.log('Intentando iniciar sesión con:', { username });
       
-      // Crear FormData para enviar los datos como formulario URL-encoded
-      const formData = new URLSearchParams();
-      formData.append('username', username);
-      formData.append('password', password);
-      
-      const response = await api.post<LoginResponse>('/auth/login', formData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
+      const loginData: LoginRequest = { username, password };
+      const response = await api.post<LoginResponse>('/auth/login', loginData);
       
       console.log('Respuesta del servidor:', response.data);
       
-      // Verificar si la respuesta es un HTML (lo que indicaría un error)
-      const responseData = response.data as any;
-      if (typeof responseData === 'string' && responseData.includes('<!DOCTYPE html>')) {
-        throw new Error('El servidor devolvió un formulario HTML en lugar de datos JSON');
+      if (response.data.success) {
+        // Verificar el estado de autenticación para obtener datos completos del usuario
+        const authCheck = await this.checkAuth();
+        
+        if (authCheck.authenticated && authCheck.user) {
+          localStorage.setItem('userData', JSON.stringify(authCheck.user));
+          
+          return { 
+            success: true,
+            message: response.data.message,
+            user: authCheck.user
+          };
+        }
       }
       
-      // Guardar datos del usuario en localStorage
-      if (response.data && response.data.user) {
-        localStorage.setItem('userData', JSON.stringify(response.data.user));
-        
-        return { 
-          success: true,
-          message: 'Inicio de sesión exitoso',
-          user: response.data.user
-        };
-      } else {
-        throw new Error('La respuesta del servidor no contiene datos de usuario');
-      }
+      return { 
+        success: false, 
+        message: response.data.message || 'Error al iniciar sesión'
+      };
     } catch (error) {
       console.error('Error en la petición de login:', error);
       return { 
@@ -99,15 +100,31 @@ export class GymApiService {
     }
   }
 
-  static logout(): void {
-    localStorage.removeItem('userData');
+  static async logout(): Promise<void> {
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+    } finally {
+      localStorage.removeItem('userData');
+    }
   }
 
-  // --- Users ---
+  static async checkAuth(): Promise<AuthCheckResponse> {
+    try {
+      const response = await api.get<AuthCheckResponse>('/auth/check');
+      return response.data;
+    } catch (error) {
+      console.error('Error al verificar autenticación:', error);
+      return { authenticated: false };
+    }
+  }
+
+  // --- Usuarios ---
   static async getUsers(): Promise<User[]> {
     try {
-      const response = await api.get<ApiResponse<User[]>>('/usuarios');
-      return response.data.data;
+      const response = await api.get<User[]>('/usuarios');
+      return response.data;
     } catch (error) {
       return handleApiError(error);
     }
@@ -115,128 +132,173 @@ export class GymApiService {
 
   static async getUser(id: number): Promise<User> {
     try {
-      const response = await api.get<ApiResponse<User>>(`/usuarios/${id}`);
-      return response.data.data;
+      const response = await api.get<User>(`/usuarios/${id}`);
+      return response.data;
     } catch (error) {
       return handleApiError(error);
     }
   }
 
-  static async createUser(user: Partial<User>): Promise<User> {
+  static async createUser(userData: CreateUserRequest): Promise<User> {
     try {
-      const response = await api.post<ApiResponse<User>>('/usuarios', user);
-      return response.data.data;
+      const response = await api.post<User>('/usuarios', userData);
+      return response.data;
     } catch (error) {
       return handleApiError(error);
     }
   }
 
-  static async updateUser(id: number, user: Partial<User>): Promise<User> {
-    const response = await api.put<ApiResponse<User>>(`/usuarios/${id}`, user);
-    return response.data.data;
+  static async updateUser(id: number, userData: UpdateUserRequest): Promise<User> {
+    try {
+      const response = await api.put<User>(`/usuarios/${id}`, userData);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
   static async deleteUser(id: number): Promise<void> {
-    await api.delete(`/usuarios/${id}`);
+    try {
+      await api.delete(`/usuarios/${id}`);
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  // --- Memberships ---
+  // --- Membresías ---
   static async getMemberships(): Promise<Membership[]> {
-    const response = await api.get<ApiResponse<Membership[]>>('/membresias');
-    return response.data.data;
+    try {
+      const response = await api.get<Membership[]>('/membresias');
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
   static async getMembership(id: number): Promise<Membership> {
-    const response = await api.get<ApiResponse<Membership>>(`/membresias/${id}`);
-    return response.data.data;
+    try {
+      const response = await api.get<Membership>(`/membresias/${id}`);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async createMembership(membership: Partial<Membership>): Promise<Membership> {
-    const response = await api.post<ApiResponse<Membership>>('/membresias', membership);
-    return response.data.data;
+  static async getUserMemberships(usuarioId: number): Promise<Membership[]> {
+    try {
+      const response = await api.get<Membership[]>(`/membresias/usuario/${usuarioId}`);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async updateMembership(id: number, membership: Partial<Membership>): Promise<Membership> {
-    const response = await api.put<ApiResponse<Membership>>(`/membresias/${id}`, membership);
-    return response.data.data;
+  static async createMembership(membershipData: CreateMembershipRequest): Promise<Membership> {
+    try {
+      const response = await api.post<Membership>('/membresias', membershipData);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
+  }
+
+  static async updateMembership(id: number, membershipData: Partial<CreateMembershipRequest>): Promise<Membership> {
+    try {
+      const response = await api.put<Membership>(`/membresias/${id}`, membershipData);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
   static async deleteMembership(id: number): Promise<void> {
-    await api.delete(`/membresias/${id}`);
+    try {
+      await api.delete(`/membresias/${id}`);
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  // --- Membership Registrations ---
-  static async getMembershipRegistrations(): Promise<MembershipRegistration[]> {
-    const response = await api.get<ApiResponse<MembershipRegistration[]>>('/registro-membresias');
-    return response.data.data;
+  // --- Registro de Membresías ---
+  static async createMembershipRegistration(registrationData: CreateMembershipRegistrationRequest): Promise<MembershipRegistration> {
+    try {
+      const response = await api.post<MembershipRegistration>('/registro-membresias', registrationData);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async getMembershipRegistration(id: number): Promise<MembershipRegistration> {
-    const response = await api.get<ApiResponse<MembershipRegistration>>(`/registro-membresias/${id}`);
-    return response.data.data;
+  static async getUserMembershipRegistrations(usuarioId: number): Promise<MembershipRegistration[]> {
+    try {
+      const response = await api.get<MembershipRegistration[]>(`/registro-membresias/usuario/${usuarioId}`);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async createMembershipRegistration(reg: Partial<MembershipRegistration>): Promise<MembershipRegistration> {
-    const response = await api.post<ApiResponse<MembershipRegistration>>('/registro-membresias', reg);
-    return response.data.data;
+  // --- Pagos ---
+  static async createPayment(paymentData: CreatePaymentRequest): Promise<Payment> {
+    try {
+      const response = await api.post<Payment>('/pagos', paymentData);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async updateMembershipRegistration(id: number, reg: Partial<MembershipRegistration>): Promise<MembershipRegistration> {
-    const response = await api.put<ApiResponse<MembershipRegistration>>(`/registro-membresias/${id}`, reg);
-    return response.data.data;
+  static async getUserPayments(usuarioId: number): Promise<Payment[]> {
+    try {
+      const response = await api.get<Payment[]>(`/pagos/usuario/${usuarioId}`);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async deleteMembershipRegistration(id: number): Promise<void> {
-    await api.delete(`/registro-membresias/${id}`);
-  }
-
-  // --- Payments ---
-  static async getPayments(): Promise<Payment[]> {
-    const response = await api.get<ApiResponse<Payment[]>>('/pagos');
-    return response.data.data;
-  }
-
-  static async getPayment(id: number): Promise<Payment> {
-    const response = await api.get<ApiResponse<Payment>>(`/pagos/${id}`);
-    return response.data.data;
-  }
-
-  static async createPayment(payment: Partial<Payment>): Promise<Payment> {
-    const response = await api.post<ApiResponse<Payment>>('/pagos', payment);
-    return response.data.data;
-  }
-
-  static async updatePayment(id: number, payment: Partial<Payment>): Promise<Payment> {
-    const response = await api.put<ApiResponse<Payment>>(`/pagos/${id}`, payment);
-    return response.data.data;
-  }
-
-  static async deletePayment(id: number): Promise<void> {
-    await api.delete(`/pagos/${id}`);
-  }
-
-  // --- Products ---
+  // --- Productos ---
   static async getProducts(): Promise<Product[]> {
-    const response = await api.get<ApiResponse<Product[]>>('/productos');
-    return response.data.data;
+    try {
+      const response = await api.get<Product[]>('/productos');
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
   static async getProduct(id: number): Promise<Product> {
-    const response = await api.get<ApiResponse<Product>>(`/productos/${id}`);
-    return response.data.data;
+    try {
+      const response = await api.get<Product>(`/productos/${id}`);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async createProduct(product: Partial<Product>): Promise<Product> {
-    const response = await api.post<ApiResponse<Product>>('/productos', product);
-    return response.data.data;
+  static async createProduct(productData: CreateProductRequest): Promise<Product> {
+    try {
+      const response = await api.post<Product>('/productos', productData);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
-  static async updateProduct(id: number, product: Partial<Product>): Promise<Product> {
-    const response = await api.put<ApiResponse<Product>>(`/productos/${id}`, product);
-    return response.data.data;
+  static async updateProduct(id: number, productData: Partial<CreateProductRequest>): Promise<Product> {
+    try {
+      const response = await api.put<Product>(`/productos/${id}`, productData);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 
   static async deleteProduct(id: number): Promise<void> {
-    await api.delete(`/productos/${id}`);
+    try {
+      await api.delete(`/productos/${id}`);
+    } catch (error) {
+      return handleApiError(error);
+    }
   }
 }

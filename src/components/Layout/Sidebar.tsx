@@ -10,32 +10,53 @@ import {
   ShoppingCart,
   BarChart3,
   Settings,
+  UserPlus,
+  Receipt,
 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isEmployee, isClient } = useAuth();
   const location = useLocation();
 
   const adminMenuItems = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
     { icon: Users, label: 'Usuarios', path: '/usuarios' },
     { icon: Calendar, label: 'Membresías', path: '/membresias' },
-    { icon: CreditCard, label: 'Registros', path: '/registro-membresias' },
+    { icon: UserPlus, label: 'Registros', path: '/registro-membresias' },
     { icon: DollarSign, label: 'Pagos', path: '/pagos' },
     { icon: ShoppingCart, label: 'Productos', path: '/productos' },
     { icon: BarChart3, label: 'Reportes', path: '/reportes' },
     { icon: Settings, label: 'Configuración', path: '/configuracion' },
   ];
 
-  const userMenuItems = [
-    { icon: Home, label: 'Mi Dashboard', path: '/dashboard' },
-    { icon: Calendar, label: 'Mi Membresía', path: '/mi-membresia' },
-    { icon: DollarSign, label: 'Mis Pagos', path: '/mis-pagos' },
-    { icon: ShoppingCart, label: 'Tienda', path: '/tienda' },
+  const employeeMenuItems = [
+    { icon: Home, label: 'Dashboard', path: '/dashboard' },
+    { icon: Users, label: 'Clientes', path: '/clientes' },
+    { icon: Calendar, label: 'Membresías', path: '/membresias' },
+    { icon: UserPlus, label: 'Registros', path: '/registro-membresias' },
+    { icon: DollarSign, label: 'Pagos', path: '/pagos' },
+    { icon: ShoppingCart, label: 'Productos', path: '/productos' },
     { icon: Settings, label: 'Perfil', path: '/perfil' },
   ];
 
-  const menuItems = isAdmin ? adminMenuItems : userMenuItems;
+  const clientMenuItems = [
+    { icon: Home, label: 'Mi Dashboard', path: '/dashboard' },
+    { icon: CreditCard, label: 'Mi Membresía', path: '/mi-membresia' },
+    { icon: Receipt, label: 'Mis Pagos', path: '/mis-pagos' },
+    { icon: ShoppingCart, label: 'Tienda', path: '/tienda' },
+    { icon: Settings, label: 'Mi Perfil', path: '/perfil' },
+  ];
+
+  let menuItems = clientMenuItems;
+  let panelTitle = 'Panel de Cliente';
+
+  if (isAdmin) {
+    menuItems = adminMenuItems;
+    panelTitle = 'Panel de Administración';
+  } else if (isEmployee) {
+    menuItems = employeeMenuItems;
+    panelTitle = 'Panel de Empleado';
+  }
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -43,7 +64,7 @@ const Sidebar: React.FC = () => {
     <aside className="w-64 bg-white shadow-lg h-full border-r border-gray-200">
       <div className="p-4">
         <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
-          {isAdmin ? 'Panel de Administración' : 'Panel de Usuario'}
+          {panelTitle}
         </h2>
         <nav className="space-y-2">
           {menuItems.map((item) => (
@@ -65,5 +86,3 @@ const Sidebar: React.FC = () => {
     </aside>
   );
 };
-
-export default Sidebar;

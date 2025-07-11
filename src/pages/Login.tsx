@@ -16,8 +16,9 @@ const Login: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
+  
     try {
+      console.log('Intentando iniciar sesión con:', { username, password });
       const result = await login(username, password);
       console.log('Resultado del login:', result);
       
@@ -29,7 +30,7 @@ const Login: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error en handleSubmit:', err);
-      setError(err.message || 'Error al iniciar sesión. Intente nuevamente.');
+      setError(err.response?.data?.message || 'Error al iniciar sesión. Intente nuevamente.');
     } finally {
       setLoading(false);
     }
