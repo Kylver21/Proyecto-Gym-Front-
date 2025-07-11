@@ -47,6 +47,7 @@ export interface LoginResponse {
 export interface LoginResult {
   success: boolean;
   message?: string;
+  user?: User;
 }
 
 export interface AuthContextType {

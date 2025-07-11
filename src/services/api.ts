@@ -1,5 +1,4 @@
 import axios from 'axios';
-import type { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
 import type {
   User,
   Membership,
@@ -8,6 +7,7 @@ import type {
   Product,
   ApiResponse,
   LoginResponse,
+  LoginResult
 } from '../types';
 
 const API_BASE_URL = 'http://localhost:8080/api';
@@ -18,69 +18,88 @@ const api = axios.create({
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
+  withCredentials: true // Importante para manejar sesiones
 });
 
-// Interceptor para añadir el token a las peticiones
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+// Interceptor para manejar errores de autenticación
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response && error.response.status === 401) {
+      // Redirigir a login si no está autenticado
+      window.location.href = '/login';
     }
-    return config;
-  },
-  (error) => {
     return Promise.reject(error);
   }
 );
 
-// Interceptor para manejar errores
-type ApiError = {
-  message: string;
-  status: number;
-  data?: any;
-};
-
-const handleApiError = (error: unknown): never => {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError<{ message?: string }>;
-    const errorMessage = 
-      axiosError.response?.data?.message || 
-      axiosError.message || 
-      'Error de conexión con el servidor';
-    
-    // Si el token expiró, limpiar y redirigir
-    if (axiosError.response?.status === 401) {
-      localStorage.removeItem('authToken');
-      window.location.href = '/login';
-    }
-
-    throw new Error(errorMessage);
+// Función simple para manejar errores
+const handleApiError = (error: any): never => {
+  console.error('Error en la petición:', error);
+  
+  let errorMessage = 'Error de conexión con el servidor';
+  
+  if (error.response) {
+    // El servidor respondió con un código de estado fuera del rango 2xx
+    const { status, data } = error.response;
+    errorMessage = data?.message || `Error del servidor: ${status}`;
+  } else if (error.request) {
+    // La petición fue hecha pero no se recibió respuesta
+    errorMessage = 'No se pudo conectar con el servidor';
   }
-  throw new Error('Error desconocido al realizar la petición');
+  
+  throw new Error(errorMessage);
 };
 
 export class GymApiService {
   // --- Auth ---
-  static async login(username: string, password: string): Promise<LoginResponse> {
+  static async login(username: string, password: string): Promise<LoginResult> {
     try {
-      const response = await api.post<LoginResponse>('/auth/login', { username, password });
-      const { token, user } = response.data;
+      console.log('Intentando iniciar sesión con:', { username });
       
-      if (token) {
-        localStorage.setItem('authToken', token);
-        localStorage.setItem('userData', JSON.stringify(user));
+      // Crear FormData para enviar los datos como formulario URL-encoded
+      const formData = new URLSearchParams();
+      formData.append('username', username);
+      formData.append('password', password);
+      
+      const response = await api.post<LoginResponse>('/auth/login', formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+      
+      console.log('Respuesta del servidor:', response.data);
+      
+      // Verificar si la respuesta es un HTML (lo que indicaría un error)
+      const responseData = response.data as any;
+      if (typeof responseData === 'string' && responseData.includes('<!DOCTYPE html>')) {
+        throw new Error('El servidor devolvió un formulario HTML en lugar de datos JSON');
       }
       
-      return response.data;
+      // Guardar datos del usuario en localStorage
+      if (response.data && response.data.user) {
+        localStorage.setItem('userData', JSON.stringify(response.data.user));
+        
+        return { 
+          success: true,
+          message: 'Inicio de sesión exitoso',
+          user: response.data.user
+        };
+      } else {
+        throw new Error('La respuesta del servidor no contiene datos de usuario');
+      }
     } catch (error) {
-      return handleApiError(error);
+      console.error('Error en la petición de login:', error);
+      return { 
+        success: false, 
+        message: error instanceof Error ? error.message : 'Error al iniciar sesión'
+      };
     }
   }
 
-  static logout() {
-    localStorage.removeItem('authToken');
+  static logout(): void {
     localStorage.removeItem('userData');
   }
 

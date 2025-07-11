@@ -19,12 +19,16 @@ const Login: React.FC = () => {
 
     try {
       const result = await login(username, password);
+      console.log('Resultado del login:', result);
+      
       if (result.success) {
+        console.log('Redirigiendo a /dashboard');
         navigate('/dashboard');
       } else {
         setError(result.message || 'Credenciales inválidas. Intente nuevamente.');
       }
     } catch (err: any) {
+      console.error('Error en handleSubmit:', err);
       setError(err.message || 'Error al iniciar sesión. Intente nuevamente.');
     } finally {
       setLoading(false);
@@ -107,12 +111,6 @@ const Login: React.FC = () => {
               >
                 {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </button>
-            </div>
-
-            <div className="mt-4 text-center">
-              <p className="text-sm text-gray-600">
-                Demo: admin/admin (Admin) o user/user (Usuario)
-              </p>
             </div>
           </div>
         </form>

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { User, AuthContextType } from '../types';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, AuthContextType, LoginResult } from '../types';
 import { GymApiService } from '../services/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -7,7 +7,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth debe usarse dentro de un AuthProvider');
   }
   return context;
 };
@@ -17,11 +17,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   // Verificar si el usuario está autenticado al cargar la aplicación
-  const checkAuth = useCallback(async () => {
-    const token = localStorage.getItem('authToken');
+  useEffect(() => {
     const userData = localStorage.getItem('userData');
     
-    if (token && userData) {
+    if (userData) {
       try {
         const parsedUser = JSON.parse(userData) as User;
         setUser(parsedUser);
@@ -33,29 +32,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
   // Función para iniciar sesión
-  const login = async (username: string, password: string): Promise<{ success: boolean; message?: string }> => {
+  const login = async (username: string, password: string): Promise<LoginResult> => {
     try {
-      const response = await GymApiService.login(username, password);
+      const result = await GymApiService.login(username, password);
       
-      if (response.token && response.user) {
-        setUser(response.user);
-        return { success: true };
+      if (result.success && result.user) {
+        const userData = result.user;
+        setUser(userData);
+        localStorage.setItem('userData', JSON.stringify(userData));
+        console.log('Usuario autenticado:', userData);
+        return { 
+          success: true, 
+          message: 'Inicio de sesión exitoso',
+          user: userData
+        };
       }
       
       return { 
         success: false, 
-        message: response.message || 'Error al iniciar sesión. Por favor, intente nuevamente.' 
+        message: result.message || 'Error al iniciar sesión. Por favor, intente nuevamente.'
       };
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error al iniciar sesión:', error);
       return { 
         success: false, 
-        message: error.message || 'Error de conexión. Por favor, intente nuevamente.' 
+        message: error instanceof Error ? error.message : 'Error al iniciar sesión'
       };
     }
   };
