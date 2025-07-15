@@ -3,10 +3,15 @@ import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
 import Memberships from './pages/Memberships';
 import Products from './pages/Products';
+import Registros from './pages/Registros';
+import Pagos from './pages/Pagos';
+import Reportes from './pages/Reportes';
+import Configuracion from './pages/Configuracion';
 
 function App() {
   return (
@@ -15,6 +20,7 @@ function App() {
         <Layout>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             <Route 
               path="/dashboard" 
               element={
@@ -24,26 +30,58 @@ function App() {
               } 
             />
             <Route 
-              path="/usuarios" 
+              path="/users" 
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute>
                   <Users />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/membresias" 
+              path="/memberships" 
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute>
                   <Memberships />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/productos" 
+              path="/products" 
               element={
-                <ProtectedRoute adminOnly>
+                <ProtectedRoute>
                   <Products />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/registros" 
+              element={
+                <ProtectedRoute>
+                  <Registros />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/pagos" 
+              element={
+                <ProtectedRoute>
+                  <Pagos />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/reportes" 
+              element={
+                <ProtectedRoute>
+                  <Reportes />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/configuracion" 
+              element={
+                <ProtectedRoute>
+                  <Configuracion />
                 </ProtectedRoute>
               } 
             />

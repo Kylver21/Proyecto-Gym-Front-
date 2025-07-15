@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Membership } from '../types';
+import { Membership, MembershipRegistration } from '../types';
 import { GymApiService } from '../services/api';
-import { Plus, Edit, Trash2, Search, Calendar, DollarSign } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Calendar, DollarSign, Clock, User } from 'lucide-react';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import ErrorMessage from '../components/Common/ErrorMessage';
 import ConfirmDialog from '../components/Common/ConfirmDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 const Memberships: React.FC = () => {
+  const { user, isClient, isAdmin, isEmployee } = useAuth();
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [clientRegistrations, setClientRegistrations] = useState<MembershipRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,15 +27,37 @@ const Memberships: React.FC = () => {
   });
 
   const [formData, setFormData] = useState({
-    tipo: 'MENSUAL' as 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL',
+    tipo: 'MENSUAL' as 'MENSUAL' | 'TRIMESTRAL' | 'ANUAL' | 'DIARIO',
     descripcion: '',
     precio: '',
-    duracionDias: '',
+    duracion_dias: '',
   });
 
   useEffect(() => {
-    fetchMemberships();
-  }, []);
+    if (isClient && user) {
+      // Si es cliente, cargar sus membresías registradas
+      fetchClientMemberships();
+    } else if (isAdmin || isEmployee) {
+      // Si es admin o empleado, cargar todas las membresías para gestión
+      fetchMemberships();
+    }
+  }, [isClient, isAdmin, isEmployee, user]);
+
+  const fetchClientMemberships = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setLoading(true);
+      setError(null);
+      const registrations = await GymApiService.getUserMembershipRegistrations(user.id);
+      setClientRegistrations(registrations);
+    } catch (err) {
+      setError('Error al cargar tus membresías');
+      console.error('Error fetching client memberships:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchMemberships = async () => {
     try {
@@ -58,19 +83,27 @@ const Memberships: React.FC = () => {
         tipo: formData.tipo,
         descripcion: formData.descripcion,
         precio: parseFloat(formData.precio),
-        duracionDias: parseInt(formData.duracionDias),
+        duracion_dias: parseInt(formData.duracion_dias),
       };
 
       if (editingMembership) {
         // Update membership
         const updatedMembership = await GymApiService.updateMembership(editingMembership.id, membershipData);
-        setMemberships(memberships.map(membership => 
-          membership.id === editingMembership.id ? updatedMembership : membership
-        ));
+        if (updatedMembership) {
+          setMemberships(memberships.map(membership => 
+            membership.id === editingMembership.id ? updatedMembership : membership
+          ));
+        } else {
+          console.warn('No se actualizó la membresía: respuesta null');
+        }
       } else {
         // Create new membership
         const newMembership = await GymApiService.createMembership(membershipData);
-        setMemberships([...memberships, newMembership]);
+        if (newMembership) {
+          setMemberships([...memberships, newMembership]);
+        } else {
+          console.warn('No se creó la membresía: respuesta null');
+        }
       }
       
       resetForm();
@@ -88,7 +121,7 @@ const Memberships: React.FC = () => {
       tipo: membership.tipo,
       descripcion: membership.descripcion,
       precio: membership.precio.toString(),
-      duracionDias: membership.duracionDias.toString(),
+      duracion_dias: membership.duracion_dias.toString(),
     });
     setShowForm(true);
   };
@@ -122,16 +155,33 @@ const Memberships: React.FC = () => {
       tipo: 'MENSUAL',
       descripcion: '',
       precio: '',
-      duracionDias: '',
+      duracion_dias: '',
     });
     setEditingMembership(null);
     setShowForm(false);
   };
 
-  const filteredMemberships = memberships.filter(membership =>
-    membership.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    membership.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Funciones helper para clientes
+  const getEstadoBadge = (estado: string) => {
+    const styles = {
+      ACTIVA: 'bg-green-100 text-green-800',
+      VENCIDA: 'bg-red-100 text-red-800',
+      CANCELADA: 'bg-gray-100 text-gray-800',
+    };
+    return styles[estado as keyof typeof styles] || 'bg-gray-100 text-gray-800';
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-ES');
+  };
+
+  const calculateDaysRemaining = (fecha_fin: string) => {
+    const today = new Date();
+    const endDate = new Date(fecha_fin);
+    const diffTime = endDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
 
   const getTypeColor = (tipo: string) => {
     const colors = {
@@ -143,13 +193,112 @@ const Memberships: React.FC = () => {
     return colors[tipo as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
 
-  if (loading && memberships.length === 0) {
+  if (loading && (memberships.length === 0 && clientRegistrations.length === 0)) {
     return (
       <div className="flex justify-center items-center h-64">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
+
+  // Vista para clientes - Mostrar sus membresías
+  if (isClient) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-gray-900">Mi Membresía</h1>
+          <div className="flex items-center space-x-2">
+            <User className="h-5 w-5 text-gray-600" />
+            <span className="text-gray-600">{user?.nombre} {user?.apellido}</span>
+          </div>
+        </div>
+
+        {error && (
+          <ErrorMessage message={error} onRetry={fetchClientMemberships} />
+        )}
+
+        {clientRegistrations.length === 0 ? (
+          <div className="text-center py-12">
+            <Calendar className="mx-auto h-16 w-16 text-gray-400" />
+            <h3 className="text-xl font-medium text-gray-900 mt-4">No tienes membresías activas</h3>
+            <p className="text-gray-500 mt-2">
+              Contacta con el gimnasio para activar una membresía
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            {clientRegistrations.map((registration) => {
+              const daysRemaining = calculateDaysRemaining(registration.fecha_fin);
+              return (
+                <div key={registration.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-bold text-gray-900">
+                          {registration.membresia?.tipo}
+                        </h3>
+                        <p className="text-gray-600 mt-1">
+                          {registration.membresia?.descripcion}
+                        </p>
+                      </div>
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getEstadoBadge(registration.estado)}`}>
+                        {registration.estado}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <div className="text-blue-600 text-sm font-medium">Precio</div>
+                        <div className="text-2xl font-bold text-blue-900">
+                          ${registration.membresia?.precio.toFixed(2)}
+                        </div>
+                      </div>
+                      
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <div className="text-green-600 text-sm font-medium">Fecha de Inicio</div>
+                        <div className="text-lg font-semibold text-green-900">
+                          {formatDate(registration.fecha_inicio)}
+                        </div>
+                      </div>
+                      
+                      <div className="bg-purple-50 p-4 rounded-lg">
+                        <div className="text-purple-600 text-sm font-medium">Fecha de Fin</div>
+                        <div className="text-lg font-semibold text-purple-900">
+                          {formatDate(registration.fecha_fin)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {registration.estado === 'ACTIVA' && (
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <div className="flex items-center">
+                          <Clock className="h-5 w-5 mr-2" />
+                          <span className={`font-medium ${daysRemaining > 7 ? 'text-green-600' : daysRemaining > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {daysRemaining > 0 ? `${daysRemaining} días restantes` : 'Membresía vencida'}
+                          </span>
+                        </div>
+                        {daysRemaining <= 7 && daysRemaining > 0 && (
+                          <p className="text-sm text-yellow-700 mt-1">
+                            ⚠️ Tu membresía está próxima a vencer. Contacta con el gimnasio para renovarla.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Vista para administradores y empleados
+  const filteredMemberships = memberships.filter(membership =>
+    membership.tipo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    membership.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -227,7 +376,7 @@ const Memberships: React.FC = () => {
               
               <div className="flex items-center space-x-1 text-sm text-gray-500">
                 <Calendar className="h-4 w-4" />
-                <span>{membership.duracionDias} días de duración</span>
+                <span>{membership.duracion_dias} días de duración</span>
               </div>
             </div>
           </div>
@@ -253,9 +402,9 @@ const Memberships: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, tipo: e.target.value as any })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
+                  <option value="DIARIO">Diario</option>
                   <option value="MENSUAL">Mensual</option>
                   <option value="TRIMESTRAL">Trimestral</option>
-                  <option value="SEMESTRAL">Semestral</option>
                   <option value="ANUAL">Anual</option>
                 </select>
               </div>
@@ -298,8 +447,8 @@ const Memberships: React.FC = () => {
                   type="number"
                   required
                   min="1"
-                  value={formData.duracionDias}
-                  onChange={(e) => setFormData({ ...formData, duracionDias: e.target.value })}
+                  value={formData.duracion_dias}
+                  onChange={(e) => setFormData({ ...formData, duracion_dias: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="30"
                 />

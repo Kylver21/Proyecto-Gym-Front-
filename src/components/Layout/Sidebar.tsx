@@ -20,31 +20,31 @@ const Sidebar: React.FC = () => {
 
   const adminMenuItems = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
-    { icon: Users, label: 'Usuarios', path: '/usuarios' },
-    { icon: Calendar, label: 'Membresías', path: '/membresias' },
-    { icon: UserPlus, label: 'Registros', path: '/registro-membresias' },
+    { icon: Users, label: 'Usuarios', path: '/users' },
+    { icon: Calendar, label: 'Membresías', path: '/memberships' },
+    { icon: UserPlus, label: 'Registros', path: '/registros' },
     { icon: DollarSign, label: 'Pagos', path: '/pagos' },
-    { icon: ShoppingCart, label: 'Productos', path: '/productos' },
+    { icon: ShoppingCart, label: 'Productos', path: '/products' },
     { icon: BarChart3, label: 'Reportes', path: '/reportes' },
     { icon: Settings, label: 'Configuración', path: '/configuracion' },
   ];
 
   const employeeMenuItems = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
-    { icon: Users, label: 'Clientes', path: '/clientes' },
-    { icon: Calendar, label: 'Membresías', path: '/membresias' },
-    { icon: UserPlus, label: 'Registros', path: '/registro-membresias' },
+    { icon: Users, label: 'Clientes', path: '/users' },
+    { icon: Calendar, label: 'Membresías', path: '/memberships' },
+    { icon: UserPlus, label: 'Registros', path: '/registros' },
     { icon: DollarSign, label: 'Pagos', path: '/pagos' },
-    { icon: ShoppingCart, label: 'Productos', path: '/productos' },
-    { icon: Settings, label: 'Perfil', path: '/perfil' },
+    { icon: ShoppingCart, label: 'Productos', path: '/products' },
+    { icon: Settings, label: 'Configuración', path: '/configuracion' },
   ];
 
   const clientMenuItems = [
     { icon: Home, label: 'Mi Dashboard', path: '/dashboard' },
-    { icon: CreditCard, label: 'Mi Membresía', path: '/mi-membresia' },
-    { icon: Receipt, label: 'Mis Pagos', path: '/mis-pagos' },
-    { icon: ShoppingCart, label: 'Tienda', path: '/tienda' },
-    { icon: Settings, label: 'Mi Perfil', path: '/perfil' },
+    { icon: CreditCard, label: 'Mi Membresía', path: '/memberships' },
+    { icon: Receipt, label: 'Mis Pagos', path: '/pagos' },
+    { icon: ShoppingCart, label: 'Tienda', path: '/products' },
+    { icon: Settings, label: 'Mi Perfil', path: '/configuracion' },
   ];
 
   let menuItems = clientMenuItems;
@@ -56,6 +56,9 @@ const Sidebar: React.FC = () => {
   } else if (isEmployee) {
     menuItems = employeeMenuItems;
     panelTitle = 'Panel de Empleado';
+  } else if (isClient) {
+    menuItems = clientMenuItems;
+    panelTitle = 'Panel de Cliente';
   }
 
   const isActive = (path: string) => location.pathname === path;

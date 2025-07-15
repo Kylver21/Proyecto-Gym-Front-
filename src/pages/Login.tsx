@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Dumbbell, Eye, EyeOff } from 'lucide-react';
 
 const Login: React.FC = () => {
@@ -8,9 +8,20 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Verificar si hay un mensaje de éxito del registro
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message);
+      // Limpiar el estado para que no se muestre en futuras visitas
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +109,12 @@ const Login: React.FC = () => {
               </div>
             </div>
 
+            {successMessage && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                <p className="text-sm text-green-600">{successMessage}</p>
+              </div>
+            )}
+
             {error && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
                 <p className="text-sm text-red-600">{error}</p>
@@ -112,6 +129,19 @@ const Login: React.FC = () => {
               >
                 {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
               </button>
+            </div>
+
+            {/* Link al registro */}
+            <div className="mt-4 text-center">
+              <span className="text-sm text-gray-600">
+                ¿No tienes cuenta?{' '}
+                <Link 
+                  to="/register" 
+                  className="font-medium text-blue-600 hover:text-blue-500 transition-colors"
+                >
+                  Regístrate aquí
+                </Link>
+              </span>
             </div>
           </div>
         </form>

@@ -63,11 +63,19 @@ const Users: React.FC = () => {
           password: formData.password || undefined, // No enviar password vacío
         };
         const updatedUser = await GymApiService.updateUser(editingUser.id, updateData);
-        setUsers(users.map(user => user.id === editingUser.id ? updatedUser : user));
+        if (updatedUser) {
+          setUsers(users.map(user => user.id === editingUser.id ? updatedUser : user));
+        } else {
+          console.warn('Update returned null');
+        }
       } else {
         // Crear usuario
         const newUser = await GymApiService.createUser(formData);
-        setUsers([...users, newUser]);
+        if (newUser) {
+          setUsers([...users, newUser]);
+        } else {
+          console.warn('Create returned null');
+        }
       }
       
       resetForm();
@@ -128,6 +136,7 @@ const Users: React.FC = () => {
     setEditingUser(null);
     setShowForm(false);
   };
+
 
   const filteredUsers = users.filter(user =>
     user.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||

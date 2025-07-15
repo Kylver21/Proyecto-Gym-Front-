@@ -1,8 +1,8 @@
-// Tipos basados en la estructura del backend
+// Estructura de usuario actualizada según la base de datos
 export interface User {
   id: number;
   username: string;
-  password?: string;
+  password?: string; 
   nombre: string;
   apellido: string;
   email: string;
@@ -12,20 +12,22 @@ export interface User {
 
 export interface Membership {
   id: number;
-  tipo: 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
+  tipo: 'MENSUAL' | 'TRIMESTRAL' | 'ANUAL' | 'DIARIO';
   descripcion: string;
   precio: number;
-  duracionDias: number;
+  duracion_dias: number;
   estado: boolean;
+  fecha_creacion?: string;
 }
 
 export interface MembershipRegistration {
   id: number;
-  usuarioId: number;
-  membresiaId: number;
-  fechaInicio: string;
-  fechaFin: string;
+  usuario_id: number;
+  membresia_id: number;
+  fecha_inicio: string;
+  fecha_fin: string;
   estado: 'ACTIVA' | 'VENCIDA' | 'CANCELADA';
+  fecha_creacion?: string;
   // Datos relacionados para mostrar
   usuario?: User;
   membresia?: Membership;
@@ -33,11 +35,13 @@ export interface MembershipRegistration {
 
 export interface Payment {
   id: number;
-  registroMembresiaId: number;
+  registro_membresia_id: number;
   monto: number;
-  fechaPago: string;
-  metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
+  fecha_pago: string;
+  metodo_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
   estado: 'COMPLETADO' | 'PENDIENTE' | 'CANCELADO';
+  comprobante_url?: string;
+  fecha_creacion?: string;
   // Datos relacionados para mostrar
   registroMembresia?: MembershipRegistration;
 }
@@ -48,19 +52,31 @@ export interface Product {
   descripcion: string;
   precio: number;
   stock: number;
-  estado: boolean;
+  imagen_url?: string;
+  estado?: boolean;
+  fecha_creacion?: string;
 }
 
+// Formulario de login simplificado
 export interface LoginRequest {
   username: string;
   password: string;
 }
 
+// Formulario de registro según la base de datos
+export interface RegisterRequest {
+  username: string;
+  password: string;
+  nombre: string;
+  email: string;
+  rol: 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+}
+
+// Respuesta del backend para login/registro
 export interface LoginResponse {
   success: boolean;
   message: string;
-  username?: string;
-  rol?: 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+  user?: User;
 }
 
 export interface AuthCheckResponse {
@@ -91,12 +107,11 @@ export interface ApiResponse<T> {
   data?: T;
 }
 
-// Tipos para formularios
+// Tipos para formularios (usando RegisterRequest para createUser)
 export interface CreateUserRequest {
   username: string;
   password: string;
   nombre: string;
-  apellido: string;
   email: string;
   rol: 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
 }
@@ -105,29 +120,28 @@ export interface UpdateUserRequest {
   username?: string;
   password?: string;
   nombre?: string;
-  apellido?: string;
   email?: string;
   rol?: 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
   estado?: boolean;
 }
 
 export interface CreateMembershipRequest {
-  tipo: 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
+  tipo: 'MENSUAL' | 'TRIMESTRAL' | 'ANUAL' | 'DIARIO';
   descripcion: string;
   precio: number;
-  duracionDias: number;
+  duracion_dias: number;
 }
 
 export interface CreateMembershipRegistrationRequest {
-  usuarioId: number;
-  membresiaId: number;
-  fechaInicio: string;
+  usuario_id: number;
+  membresia_id: number;
+  fecha_inicio: string;
 }
 
 export interface CreatePaymentRequest {
-  registroMembresiaId: number;
+  registro_membresia_id: number;
   monto: number;
-  metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
+  metodo_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
 }
 
 export interface CreateProductRequest {
@@ -135,4 +149,5 @@ export interface CreateProductRequest {
   descripcion: string;
   precio: number;
   stock: number;
+  imagen_url?: string;
 }
