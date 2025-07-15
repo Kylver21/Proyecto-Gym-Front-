@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { GymApiService } from '../services/api';
-import { Plus, Edit, Trash2, Search, UserCheck, UserX } from 'lucide-react';
+import { Plus, Edit, Trash2, Search } from 'lucide-react';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import ErrorMessage from '../components/Common/ErrorMessage';
 import ConfirmDialog from '../components/Common/ConfirmDialog';
@@ -41,6 +41,8 @@ const Users: React.FC = () => {
       setLoading(true);
       setError(null);
       const users = await GymApiService.getUsers();
+      console.log('🔍 Usuarios recibidos del backend:', users);
+      console.log('🔍 Primer usuario:', users[0]);
       setUsers(users);
     } catch (err) {
       setError('Error al cargar los usuarios');
@@ -90,14 +92,35 @@ const Users: React.FC = () => {
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setFormData({
-      username: user.username,
+      username: user.username || '',
       password: '',
-      nombre: user.nombre,
-      apellido: user.apellido,
-      email: user.email,
-      rol: user.rol,
+      nombre: user.nombre || '',
+      apellido: user.apellido || '',
+      email: user.email || '',
+      rol: user.rol || 'CLIENTE',
     });
     setShowForm(true);
+  };
+
+  const handleToggleUserStatus = async (user: User) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const updatedUser = await GymApiService.updateUser(user.id, {
+        ...user,
+        estado: !user.estado
+      });
+      
+      if (updatedUser) {
+        setUsers(users.map(u => u.id === user.id ? updatedUser : u));
+      }
+    } catch (err) {
+      setError(`Error al ${user.estado ? 'desactivar' : 'activar'} el usuario`);
+      console.error('Error toggling user status:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = (user: User) => {
@@ -139,19 +162,36 @@ const Users: React.FC = () => {
 
 
   const filteredUsers = users.filter(user =>
-    user.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.apellido.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (user.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (user.apellido || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (user.username || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (user.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getRoleBadge = (rol: string) => {
+    // Normalizar el rol (remover prefijo ROLE_ si existe y convertir a mayúsculas)
+    const normalizedRol = rol?.replace('ROLE_', '').toUpperCase() || '';
+    
     const styles = {
       ADMIN: 'bg-red-100 text-red-800',
       EMPLEADO: 'bg-blue-100 text-blue-800',
       CLIENTE: 'bg-green-100 text-green-800',
     };
-    return styles[rol as keyof typeof styles] || 'bg-gray-100 text-gray-800';
+    
+    return styles[normalizedRol as keyof typeof styles] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getRoleName = (rol: string) => {
+    // Normalizar el rol y devolver nombre legible
+    const normalizedRol = rol?.replace('ROLE_', '').toUpperCase() || '';
+    
+    const names = {
+      ADMIN: 'Administrador',
+      EMPLEADO: 'Empleado',
+      CLIENTE: 'Cliente',
+    };
+    
+    return names[normalizedRol as keyof typeof names] || rol || 'Sin rol';
   };
 
   if (loading && users.length === 0) {
@@ -224,30 +264,39 @@ const Users: React.FC = () => {
                     <div className="font-medium text-gray-900">@{user.username}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-gray-900">{user.nombre} {user.apellido}</div>
+                    <div className="text-gray-900">
+                      {`${user.nombre || ''} ${user.apellido || ''}`.trim() || 'Sin nombre'}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-gray-900">{user.email}</div>
+                    <div className="text-gray-900">{user.email || ''}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(user.rol)}`}>
-                      {user.rol}
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(user.rol || '')}`}>
+                      {getRoleName(user.rol || '')}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      {user.estado ? (
-                        <>
-                          <UserCheck className="h-4 w-4 text-green-500 mr-1" />
-                          <span className="text-green-700 text-sm">Activo</span>
-                        </>
-                      ) : (
-                        <>
-                          <UserX className="h-4 w-4 text-red-500 mr-1" />
-                          <span className="text-red-700 text-sm">Inactivo</span>
-                        </>
-                      )}
-                    </div>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={user.estado}
+                        onChange={() => handleToggleUserStatus(user)}
+                        className="sr-only"
+                      />
+                      <div className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        user.estado ? 'bg-green-500' : 'bg-red-500'
+                      }`}>
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            user.estado ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </div>
+                      <span className={`ml-3 text-sm font-medium ${user.estado ? 'text-green-700' : 'text-red-700'}`}>
+                        {user.estado ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </label>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                     <button

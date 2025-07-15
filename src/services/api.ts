@@ -35,25 +35,22 @@ const api = axios.create({
 // Interceptor para añadir información de autenticación a las requests
 api.interceptors.request.use(
   config => {
-    console.log('🔍 REQUEST:', {
-      url: config.url,
-      method: config.method,
-      withCredentials: config.withCredentials,
-      headers: config.headers
-    });
+    // Solo log para debugging crítico
+    if (config.url?.includes('/auth/')) {
+      console.log('🔐 AUTH REQUEST:', config.method?.toUpperCase(), config.url);
+    }
     
     // Obtener datos de usuario del localStorage
     const userData = localStorage.getItem('userData');
     
-    // Si hay datos de usuario, añadir headers de autenticación si el backend los requiere
+    // Si hay datos de usuario, añadir headers de autenticación si el backend los necesita
     if (userData) {
       try {
         const user = JSON.parse(userData);
-        console.log('👤 Usuario en localStorage:', user.username, user.rol);
-        // Puedes añadir headers adicionales aquí si tu backend los necesita
-        // Por ejemplo: config.headers['Authorization'] = `Bearer ${user.token}`;
+        // Solo log si hay problema con el parsing
+        // console.log('👤 Usuario en localStorage:', user.username, user.rol);
       } catch (error) {
-        console.error('Error parsing user data:', error);
+        console.error('❌ Error parsing user data:', error);
       }
     }
     
@@ -67,11 +64,10 @@ api.interceptors.request.use(
 // Interceptor para manejar errores de autenticación
 api.interceptors.response.use(
   response => {
-    console.log('✅ RESPONSE:', {
-      url: response.config.url,
-      status: response.status,
-      data: response.data ? 'DATA_PRESENT' : 'NO_DATA'
-    });
+    // Solo log para debugging crítico
+    if (response.config.url?.includes('/auth/')) {
+      console.log('✅ AUTH RESPONSE:', response.status, response.config.url);
+    }
     return response;
   },
   error => {
@@ -79,24 +75,22 @@ api.interceptors.response.use(
       url: error.config?.url,
       status: error.response?.status,
       statusText: error.response?.statusText,
-      headers: error.response?.headers,
-      withCredentials: error.config?.withCredentials
+      message: error.response?.data?.message || error.message
     });
     
     if (error.response) {
       // Manejar errores de autenticación (401) o sesión expirada (419)
       if (error.response.status === 401 || error.response.status === 419) {
-        console.warn('🚨 Error de autenticación detectado:', {
+        console.warn('🚨 Error de autenticación:', {
           status: error.response.status,
           url: error.config?.url,
-          method: error.config?.method,
-          userData: localStorage.getItem('userData') ? 'exists' : 'missing'
+          method: error.config?.method
         });
         
         // Para errores 401, limpiar datos de autenticación excepto en login/register
         if (!error.config?.url?.includes('/auth/login') &&
             !error.config?.url?.includes('/auth/register')) {
-          console.log('🧹 Limpiando datos de autenticación por error 401');
+          console.log('🧹 Limpiando datos de autenticación');
           localStorage.removeItem('userData');
           
           // Solo redirigir si no estamos ya en login y no es una petición de check auth
@@ -129,15 +123,11 @@ export class GymApiService {
   // --- Autenticación ---
   static async login(username: string, password: string): Promise<LoginResult> {
     try {
-      console.log('Intentando iniciar sesión con:', { username });
-      
       // Crear el objeto de login simple
       const loginData: LoginRequest = { 
         username, 
         password
       };
-      
-      console.log('Datos enviados al backend:', loginData);
       
       // Hacer la petición al endpoint de login
       const response = await api.post<LoginResponse>('/auth/login', loginData, {
@@ -146,8 +136,6 @@ export class GymApiService {
         },
         withCredentials: true
       });
-      
-      console.log('Respuesta del servidor:', response.data);
       
       if (response.data.success) {
         // Si el login es exitoso y viene el usuario en la respuesta
@@ -167,14 +155,13 @@ export class GymApiService {
         message: response.data?.message || 'Error al iniciar sesión. Verifica tus credenciales.'
       };
     } catch (error: any) {
-      console.error('Error en la petición de login:', error);
+      console.error('Error en login:', error);
       
       // Mostrar detalles específicos del error del backend
       if (error.response) {
         console.error('Error del servidor:', {
           status: error.response.status,
-          data: error.response.data,
-          headers: error.response.headers
+          data: error.response.data
         });
         
         // Devolver el mensaje específico del backend si está disponible
@@ -211,10 +198,8 @@ export class GymApiService {
       await api.get('/usuarios', {
         withCredentials: true
       });
-      console.log('Usuario autenticado - obtuvo usuarios exitosamente');
       return { authenticated: true };
     } catch (error: any) {
-      console.log('Error en verificación de autenticación:', error.response?.status);
       // Si hay error 401, significa que no está autenticado
       if (error.response?.status === 401) {
         return { authenticated: false };
@@ -226,13 +211,6 @@ export class GymApiService {
 
   static async register(userData: RegisterRequest): Promise<LoginResult> {
     try {
-      console.log('Intentando registrar usuario:', { 
-        username: userData.username, 
-        nombre: userData.nombre, 
-        email: userData.email, 
-        rol: userData.rol 
-      });
-      
       // Hacer la petición al endpoint de registro
       const response = await api.post<LoginResponse>('/auth/register', userData, {
         headers: {
@@ -240,8 +218,6 @@ export class GymApiService {
         },
         withCredentials: true
       });
-      
-      console.log('Respuesta del servidor:', response.data);
       
       if (response.data.success) {
         return { 
@@ -256,7 +232,7 @@ export class GymApiService {
         message: response.data?.message || 'Error al registrar el usuario'
       };
     } catch (error) {
-      console.error('Error en la petición de registro:', error);
+      console.error('Error en registro:', error);
       return { 
         success: false, 
         message: error instanceof Error ? error.message : 'Error al registrar el usuario'
@@ -268,7 +244,33 @@ export class GymApiService {
   static async getUsers(): Promise<User[]> {
     try {
       const response = await api.get<User[]>('/usuarios');
-      return response.data || [];
+      const users = response.data || [];
+      
+      const transformedUsers = users.map(user => {
+        // Normalizar el rol - remover prefijo ROLE_ si existe
+        const rolOriginal = user.rol || 'CLIENTE';
+        const normalizedRol = rolOriginal.replace('ROLE_', '').toUpperCase();
+        const validRol = ['ADMIN', 'EMPLEADO', 'CLIENTE'].includes(normalizedRol) 
+          ? normalizedRol as 'ADMIN' | 'EMPLEADO' | 'CLIENTE'
+          : 'CLIENTE' as 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+        
+        const estado = Boolean(user.estado);
+        
+        const transformedUser = {
+          ...user,
+          // Asegurar que los campos estén disponibles
+          nombre: user.nombre || '',
+          apellido: user.apellido || '',
+          email: user.email || '',
+          rol: validRol,
+          username: user.username || '',
+          estado: estado
+        };
+        
+        return transformedUser;
+      });
+      
+      return transformedUsers;
     } catch (error) {
       console.error('Error al obtener usuarios:', error);
       throw error;
@@ -288,7 +290,27 @@ export class GymApiService {
   static async createUser(userData: CreateUserRequest): Promise<User | null> {
     try {
       const response = await api.post<User>('/usuarios', userData);
-      return response.data;
+      const user = response.data;
+      
+      // Transformar el rol del usuario creado
+      if (user) {
+        const normalizedRol = (user.rol || 'CLIENTE').replace('ROLE_', '').toUpperCase();
+        const validRol = ['ADMIN', 'EMPLEADO', 'CLIENTE'].includes(normalizedRol) 
+          ? normalizedRol as 'ADMIN' | 'EMPLEADO' | 'CLIENTE'
+          : 'CLIENTE' as 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+        
+        return {
+          ...user,
+          rol: validRol,
+          nombre: user.nombre || '',
+          apellido: user.apellido || '',
+          email: user.email || '',
+          username: user.username || '',
+          estado: Boolean(user.estado)
+        };
+      }
+      
+      return user;
     } catch (error: any) {
       console.error('Error al crear usuario:', error);
       // Lanzar el error para que el componente pueda manejarlo
@@ -299,7 +321,27 @@ export class GymApiService {
   static async updateUser(id: number, userData: UpdateUserRequest): Promise<User | null> {
     try {
       const response = await api.put<User>(`/usuarios/${id}`, userData);
-      return response.data;
+      const user = response.data;
+      
+      // Transformar el rol del usuario actualizado
+      if (user) {
+        const normalizedRol = (user.rol || 'CLIENTE').replace('ROLE_', '').toUpperCase();
+        const validRol = ['ADMIN', 'EMPLEADO', 'CLIENTE'].includes(normalizedRol) 
+          ? normalizedRol as 'ADMIN' | 'EMPLEADO' | 'CLIENTE'
+          : 'CLIENTE' as 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+        
+        return {
+          ...user,
+          rol: validRol,
+          nombre: user.nombre || '',
+          apellido: user.apellido || '',
+          email: user.email || '',
+          username: user.username || '',
+          estado: Boolean(user.estado)
+        };
+      }
+      
+      return user;
     } catch (error: any) {
       console.error('Error al actualizar usuario:', error);
       throw new Error(error.response?.data?.message || 'Error al actualizar el usuario');
