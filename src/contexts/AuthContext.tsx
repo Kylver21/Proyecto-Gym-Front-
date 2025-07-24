@@ -20,50 +20,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Verificar autenticación al cargar la aplicación
   useEffect(() => {
     checkAuthStatus();
+    
+    // Verificar autenticación solo cada 10 minutos para reducir consultas
+    const interval = setInterval(async () => {
+      if (user) {
+        try {
+          await GymApiService.checkAuth();
+        } catch (error) {
+          console.warn('Sesión expirada, redirigiendo al login');
+          setUser(null);
+        }
+      }
+    }, 10 * 60 * 1000); // 10 minutos en lugar de 5
+    
+    return () => clearInterval(interval);
   }, []);
 
   const checkAuthStatus = async () => {
     try {
       console.log('Verificando estado de autenticación...');
       
-      // Verificar si hay datos en localStorage
-      const userData = localStorage.getItem('userData');
+      // Verificar autenticación con el backend usando el endpoint que existe
+      const authCheck = await GymApiService.checkAuth();
       
-      if (userData) {
-        try {
-          const parsedUser = JSON.parse(userData) as User;
-          console.log('Usuario encontrado en localStorage:', parsedUser.nombre, parsedUser.rol);
-          
-          // Verificar con el backend si la sesión sigue activa
-          try {
-            const authCheck = await GymApiService.checkAuth();
-            
-            if (authCheck.authenticated) {
-              console.log('Sesión verificada con el backend');
-              // Establecer el usuario
-              setUser(parsedUser);
-            } else {
-              console.log('Sesión no válida en el backend, limpiando localStorage');
-              localStorage.removeItem('userData');
-              setUser(null);
-            }
-          } catch (authError) {
-            console.error('Error al verificar con backend, pero manteniendo sesión local:', authError);
-            // Si falla la verificación pero tenemos datos válidos, mantener la sesión
-            // Esto permite trabajar offline o con problemas de conectividad
-            setUser(parsedUser);
-          }
-        } catch (err) {
-          console.error('Error al parsear datos de usuario:', err);
-          localStorage.removeItem('userData');
-          setUser(null);
-        }
+      if (authCheck.authenticated && authCheck.user) {
+        console.log('Usuario autenticado:', authCheck.user.nombre, authCheck.user.rol);
+        setUser(authCheck.user);
       } else {
-        console.log('No hay datos de usuario en localStorage');
+        console.log('No hay sesión activa');
         setUser(null);
       }
     } catch (error) {
-      console.error('Error inesperado al verificar autenticación:', error);
+      console.error('Error al verificar autenticación:', error);
       setUser(null);
     } finally {
       setLoading(false);
@@ -75,24 +63,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Verificar con el backend si la sesión sigue activa
       const authCheck = await GymApiService.checkAuth();
       
-      if (authCheck.authenticated) {
-        // Si hay sesión activa, verificar si tenemos datos en localStorage
-        const userData = localStorage.getItem('userData');
-        if (userData && !user) {
-          try {
-            const parsedUser = JSON.parse(userData) as User;
-            setUser(parsedUser);
-          } catch (error) {
-            console.error('Error al parsear datos de usuario:', error);
-            localStorage.removeItem('userData');
-          }
-        }
+      if (authCheck.authenticated && authCheck.user) {
+        // Si hay sesión activa, actualizar los datos del usuario
+        setUser(authCheck.user);
       } else {
         // No hay sesión activa, limpiar datos
-        if (user || localStorage.getItem('userData')) {
+        if (user) {
           console.log('Sesión no válida, limpiando datos');
           setUser(null);
-          localStorage.removeItem('userData');
         }
       }
     } catch (error) {
@@ -109,10 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (result.success && result.user) {
         console.log('Login exitoso. Usuario:', result.user.nombre, result.user.rol);
         
-        // Guardar en localStorage
-        localStorage.setItem('userData', JSON.stringify(result.user));
-        
-        // Establecer en el estado
+        // Establecer en el estado (no usar localStorage)
         setUser(result.user);
         
         return result;
@@ -139,7 +114,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       console.log('Limpiando datos de usuario...');
       setUser(null);
-      localStorage.removeItem('userData');
     }
   };
 

@@ -12,11 +12,11 @@ export interface User {
 
 export interface Membership {
   id: number;
-  tipo: 'MENSUAL' | 'TRIMESTRAL' | 'ANUAL' | 'DIARIO';
+  tipo: 'DIARIO' | 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL' | 'ESTUDIANTE' | 'PREMIUM';
   descripcion: string;
   precio: number;
   duracion_dias: number;
-  estado: boolean;
+  estado: number; // 1 = activo, 0 = inactivo (según tu BD)
   fecha_creacion?: string;
 }
 
@@ -126,7 +126,7 @@ export interface UpdateUserRequest {
 }
 
 export interface CreateMembershipRequest {
-  tipo: 'MENSUAL' | 'TRIMESTRAL' | 'ANUAL' | 'DIARIO';
+  tipo: 'DIARIO' | 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL' | 'ESTUDIANTE' | 'PREMIUM';
   descripcion: string;
   precio: number;
   duracion_dias: number;
@@ -139,9 +139,11 @@ export interface CreateMembershipRegistrationRequest {
 }
 
 export interface CreatePaymentRequest {
-  registro_membresia_id: number;
+  registroMembresiaId: number;
   monto: number;
-  metodo_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
+  fechaPago: string;
+  metodoPago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
+  estado: 'COMPLETADO' | 'PENDIENTE' | 'CANCELADO';
 }
 
 export interface CreateProductRequest {
@@ -150,4 +152,25 @@ export interface CreateProductRequest {
   precio: number;
   stock: number;
   imagen_url?: string;
+}
+
+export interface ProductSale {
+  id: number;
+  usuario_id: number;
+  producto_id: number;
+  cantidad: number;
+  precio_unitario: number;
+  precio_total: number;
+  metodo_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
+  fecha_venta: string;
+  // Datos relacionados
+  usuario?: User;
+  producto?: Product;
+}
+
+export interface CreateProductSaleRequest {
+  usuario_id: number;
+  producto_id: number;
+  cantidad: number;
+  metodo_pago: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA';
 }

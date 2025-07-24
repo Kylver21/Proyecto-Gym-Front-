@@ -15,21 +15,18 @@ import type {
   CreateMembershipRequest,
   CreateMembershipRegistrationRequest,
   CreatePaymentRequest,
-  CreateProductRequest
+  CreateProductRequest,
+  CreateProductSaleRequest
 } from '../types';
 
-const API_BASE_URL = 'http://localhost:8080/api';
-// Configuración de axios
+// Configuración exacta según el backend
+axios.defaults.baseURL = 'http://localhost:8080/api';
+axios.defaults.withCredentials = true;
+axios.defaults.headers.common['Content-Type'] = 'application/json';
+
 const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    // Evitar popup de autenticación del navegador
-    'X-Requested-With': 'XMLHttpRequest'
-  },
-  withCredentials: true // Para cookies de sesión
+  baseURL: 'http://localhost:8080/api',
+  withCredentials: true
 });
 
 // Interceptor para añadir información de autenticación a las requests
@@ -38,20 +35,6 @@ api.interceptors.request.use(
     // Solo log para debugging crítico
     if (config.url?.includes('/auth/')) {
       console.log('🔐 AUTH REQUEST:', config.method?.toUpperCase(), config.url);
-    }
-    
-    // Obtener datos de usuario del localStorage
-    const userData = localStorage.getItem('userData');
-    
-    // Si hay datos de usuario, añadir headers de autenticación si el backend los necesita
-    if (userData) {
-      try {
-        const user = JSON.parse(userData);
-        // Solo log si hay problema con el parsing
-        // console.log('👤 Usuario en localStorage:', user.username, user.rol);
-      } catch (error) {
-        console.error('❌ Error parsing user data:', error);
-      }
     }
     
     return config;
@@ -87,15 +70,14 @@ api.interceptors.response.use(
           method: error.config?.method
         });
         
-        // Para errores 401, limpiar datos de autenticación excepto en login/register
+        // Para errores 401, limpiar datos de autenticación excepto en login/register/check
         if (!error.config?.url?.includes('/auth/login') &&
-            !error.config?.url?.includes('/auth/register')) {
+            !error.config?.url?.includes('/auth/register') &&
+            !error.config?.url?.includes('/auth/check')) {
           console.log('🧹 Limpiando datos de autenticación');
-          localStorage.removeItem('userData');
           
-          // Solo redirigir si no estamos ya en login y no es una petición de check auth
-          if (!window.location.pathname.includes('/login') && 
-              !error.config?.url?.includes('/auth/check')) {
+          // Solo redirigir si no estamos ya en login
+          if (!window.location.pathname.includes('/login')) {
             console.log('🔀 Redirigiendo a login...');
             window.location.href = '/login';
           }
@@ -140,8 +122,6 @@ export class GymApiService {
       if (response.data.success) {
         // Si el login es exitoso y viene el usuario en la respuesta
         if (response.data.user) {
-          localStorage.setItem('userData', JSON.stringify(response.data.user));
-          
           return { 
             success: true,
             message: response.data.message || 'Inicio de sesión exitoso',
@@ -192,13 +172,27 @@ export class GymApiService {
 
   static async checkAuth(): Promise<AuthCheckResponse> {
     try {
-      console.log('Verificando autenticación con el backend...');
       // Intentar hacer una llamada simple que requiera autenticación
       // Si funciona, significa que estamos autenticados
-      await api.get('/usuarios', {
+      const response = await api.get('/auth/check', {
         withCredentials: true
       });
-      return { authenticated: true };
+      
+      // Verificar si la respuesta tiene el formato esperado
+      if (response.data && typeof response.data === 'object') {
+        // Usar type assertion para tratar response.data como AuthCheckResponse
+        const authData = response.data as AuthCheckResponse;
+        return { 
+          authenticated: true, 
+          user: authData.user || undefined 
+        };
+      }
+      
+      // Si no tiene el formato esperado, asumir que solo está autenticado
+      return { 
+        authenticated: true, 
+        user: undefined 
+      };
     } catch (error: any) {
       // Si hay error 401, significa que no está autenticado
       if (error.response?.status === 401) {
@@ -206,6 +200,45 @@ export class GymApiService {
       }
       // Para otros errores, también asumir que no está autenticado
       return { authenticated: false };
+    }
+  }
+
+  static async getCurrentUser(): Promise<User | null> {
+    try {
+      // Usar el endpoint de check que ya existe y devuelve los datos del usuario
+      const response = await api.get('/auth/check', {
+        withCredentials: true
+      });
+      
+      // Verificar si la respuesta tiene datos de usuario
+      if (response.data && typeof response.data === 'object') {
+        // Usar type assertion para tratar response.data como AuthCheckResponse
+        const authData = response.data as AuthCheckResponse;
+        
+        if (authData.user) {
+          // Normalizar el rol del usuario actual
+          const user = authData.user;
+          const normalizedRol = (user.rol || 'CLIENTE').replace('ROLE_', '').toUpperCase();
+          const validRol = ['ADMIN', 'EMPLEADO', 'CLIENTE'].includes(normalizedRol) 
+            ? normalizedRol as 'ADMIN' | 'EMPLEADO' | 'CLIENTE'
+            : 'CLIENTE' as 'ADMIN' | 'EMPLEADO' | 'CLIENTE';
+          
+          return {
+            ...user,
+            rol: validRol,
+            nombre: user.nombre || '',
+            apellido: user.apellido || '',
+            email: user.email || '',
+            username: user.username || '',
+            estado: Boolean(user.estado)
+          };
+        }
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.error('Error al obtener usuario actual:', error);
+      return null;
     }
   }
 
@@ -440,6 +473,53 @@ export class GymApiService {
     }
   }
 
+  static async getCurrentUserMembershipRegistrations(): Promise<MembershipRegistration[]> {
+    try {
+      console.log('🔍 Obteniendo membresías del usuario actual...');
+      
+      // Primero verificar autenticación y obtener el usuario
+      const authCheck = await this.checkAuth();
+      console.log('✅ Auth check result:', authCheck);
+      
+      if (!authCheck.authenticated) {
+        throw new Error('Usuario no autenticado');
+      }
+      
+      // Si tenemos datos de usuario desde auth/check, usar el ID
+      if (authCheck.user?.id) {
+        console.log('🔍 Buscando membresías para usuario ID:', authCheck.user.id);
+        
+        const response = await api.get<MembershipRegistration[]>(`/registro-membresias/usuario/${authCheck.user.id}`, {
+          withCredentials: true
+        });
+        
+        console.log('✅ Respuesta del backend:', response.data);
+        return response.data || [];
+      }
+      
+      // Si no tenemos ID de usuario, intentar obtenerlo de otra manera
+      console.log('🔍 No se obtuvo ID de usuario desde auth/check, obteniendo usuario actual...');
+      const currentUser = await this.getCurrentUser();
+      
+      if (!currentUser?.id) {
+        throw new Error('No se pudo obtener el ID del usuario actual');
+      }
+      
+      console.log('🔍 Buscando membresías para usuario ID:', currentUser.id);
+      
+      // Usar el método existente con el ID del usuario
+      const response = await api.get<MembershipRegistration[]>(`/registro-membresias/usuario/${currentUser.id}`, {
+        withCredentials: true
+      });
+      
+      console.log('✅ Respuesta del backend:', response.data);
+      return response.data || [];
+    } catch (error) {
+      console.error('❌ Error al obtener registros de membresía del usuario actual:', error);
+      throw error;
+    }
+  }
+
   // --- Pagos ---
   static async createPayment(paymentData: CreatePaymentRequest): Promise<Payment | null> {
     try {
@@ -509,6 +589,32 @@ export class GymApiService {
     } catch (error: any) {
       console.error('Error al eliminar producto:', error);
       throw new Error(error.response?.data?.message || 'Error al eliminar el producto');
+    }
+  }
+
+  // Método para procesar venta de producto (simular hasta que tengamos el endpoint)
+  static async processProductSale(saleData: CreateProductSaleRequest): Promise<boolean> {
+    try {
+      // Por ahora, solo actualizamos el stock del producto
+      const currentProducts = await this.getProducts();
+      const product = currentProducts.find(p => p.id === saleData.producto_id);
+      
+      if (!product) {
+        throw new Error('Producto no encontrado');
+      }
+
+      if (product.stock < saleData.cantidad) {
+        throw new Error('Stock insuficiente');
+      }
+
+      // Actualizar el stock
+      const newStock = product.stock - saleData.cantidad;
+      await this.updateProduct(saleData.producto_id, { stock: newStock });
+      
+      return true;
+    } catch (error: any) {
+      console.error('Error al procesar venta de producto:', error);
+      throw error;
     }
   }
 }

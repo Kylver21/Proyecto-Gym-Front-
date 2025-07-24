@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, Payment, MembershipRegistration } from '../types';
+import { User, Payment, MembershipRegistration, CreatePaymentRequest } from '../types';
 import { GymApiService } from '../services/api';
 import { Plus, Search, DollarSign, User as UserIcon } from 'lucide-react';
 import ErrorMessage from '../components/Common/ErrorMessage';
+import { formatDateForBackend, formatDateForDisplay } from '../utils/dateUtils';
 
 const Pagos: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -67,10 +68,12 @@ const Pagos: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const paymentData = {
-        registro_membresia_id: parseInt(formData.registro_membresia_id),
+      const paymentData: CreatePaymentRequest = {
+        registroMembresiaId: parseInt(formData.registro_membresia_id),
         monto: parseFloat(formData.monto),
-        metodo_pago: formData.metodo_pago,
+        fechaPago: formatDateForBackend(), // Formato YYYY-MM-DD
+        metodoPago: formData.metodo_pago,
+        estado: 'COMPLETADO'
       };
       
       const newPayment = await GymApiService.createPayment(paymentData);
@@ -125,13 +128,7 @@ const Pagos: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatDateForDisplay(dateString);
   };
 
   const selectedUser = users.find(user => user.id === selectedUserId);
@@ -212,7 +209,7 @@ const Pagos: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Total Pagado:</span>
                     <span className="text-2xl font-bold text-green-600">
-                      ${totalPagado.toFixed(2)}
+                      S/{totalPagado.toFixed(2)}
                     </span>
                   </div>
                   
@@ -263,7 +260,7 @@ const Pagos: React.FC = () => {
                                 {registration.membresia?.tipo}
                               </div>
                               <div className="text-sm text-gray-600">
-                                ${registration.membresia?.precio.toFixed(2)}
+                                S/{registration.membresia?.precio.toFixed(2)}
                               </div>
                             </div>
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -306,7 +303,7 @@ const Pagos: React.FC = () => {
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex-1">
                           <div className="font-semibold text-gray-900">
-                            ${payment.monto.toFixed(2)}
+                            S/{payment.monto.toFixed(2)}
                           </div>
                           <div className="text-sm text-gray-600">
                             {formatDate(payment.fecha_pago)}
@@ -360,13 +357,30 @@ const Pagos: React.FC = () => {
                 <select
                   required
                   value={formData.registro_membresia_id}
-                  onChange={(e) => setFormData({ ...formData, registro_membresia_id: e.target.value })}
+                  onChange={(e) => {
+                    const selectedRegistrationId = e.target.value;
+                    setFormData({ ...formData, registro_membresia_id: selectedRegistrationId });
+                    
+                    // Auto-llenar el monto con el precio de la membresía
+                    if (selectedRegistrationId) {
+                      const selectedReg = userRegistrations.find(r => r.id === parseInt(selectedRegistrationId));
+                      if (selectedReg && selectedReg.membresia) {
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          registro_membresia_id: selectedRegistrationId,
+                          monto: selectedReg.membresia!.precio.toString()
+                        }));
+                      }
+                    } else {
+                      setFormData(prev => ({ ...prev, monto: '' }));
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Seleccionar membresía</option>
                   {userRegistrations.map((registration) => (
                     <option key={registration.id} value={registration.id}>
-                      {registration.membresia?.tipo} - ${registration.membresia?.precio.toFixed(2)} ({registration.estado})
+                      {registration.membresia?.tipo} - S/{registration.membresia?.precio.toFixed(2)} ({registration.estado})
                     </option>
                   ))}
                 </select>
@@ -374,7 +388,7 @@ const Pagos: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Monto ($) *
+                  Monto (S/) *
                 </label>
                 <input
                   type="number"
@@ -414,7 +428,7 @@ const Pagos: React.FC = () => {
                         return (
                           <div className="mt-1">
                             <div>Tipo: {selectedRegistration.membresia?.tipo}</div>
-                            <div>Precio: ${selectedRegistration.membresia?.precio.toFixed(2)}</div>
+                            <div>Precio: S/{selectedRegistration.membresia?.precio.toFixed(2)}</div>
                             <div>Estado: {selectedRegistration.estado}</div>
                           </div>
                         );

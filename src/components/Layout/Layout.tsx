@@ -2,13 +2,14 @@ import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
+import ShoppingCartComponent from '../ShoppingCart/ShoppingCart';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isClient } = useAuth();
 
   if (!isAuthenticated) {
     return <>{children}</>;
@@ -25,6 +26,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         </main>
       </div>
+      {/* Solo mostrar el carrito para clientes */}
+      {isClient && <ShoppingCartComponent />}
     </div>
   );
 };

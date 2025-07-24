@@ -11,7 +11,6 @@ import {
   BarChart3,
   Settings,
   UserPlus,
-  Receipt,
 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
@@ -40,10 +39,9 @@ const Sidebar: React.FC = () => {
   ];
 
   const clientMenuItems = [
-    { icon: Home, label: 'Mi Dashboard', path: '/dashboard' },
-    { icon: CreditCard, label: 'Mi Membresía', path: '/memberships' },
-    { icon: Receipt, label: 'Mis Pagos', path: '/pagos' },
+    { icon: Home, label: 'Inicio', path: '/home' },
     { icon: ShoppingCart, label: 'Tienda', path: '/products' },
+    { icon: CreditCard, label: 'Mi Membresía', path: '/memberships' },
     { icon: Settings, label: 'Mi Perfil', path: '/configuracion' },
   ];
 

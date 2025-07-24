@@ -27,7 +27,7 @@ const Memberships: React.FC = () => {
   });
 
   const [formData, setFormData] = useState({
-    tipo: 'MENSUAL' as 'MENSUAL' | 'TRIMESTRAL' | 'ANUAL' | 'DIARIO',
+    tipo: 'MENSUAL' as 'DIARIO' | 'MENSUAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL' | 'ESTUDIANTE' | 'PREMIUM',
     descripcion: '',
     precio: '',
     duracion_dias: '',
@@ -44,16 +44,18 @@ const Memberships: React.FC = () => {
   }, [isClient, isAdmin, isEmployee, user]);
 
   const fetchClientMemberships = async () => {
-    if (!user?.id) return;
-    
     try {
       setLoading(true);
       setError(null);
-      const registrations = await GymApiService.getUserMembershipRegistrations(user.id);
+      console.log('🔍 Iniciando carga de membresías del cliente...');
+      
+      const registrations = await GymApiService.getCurrentUserMembershipRegistrations();
+      console.log('✅ Membresías obtenidas:', registrations);
+      
       setClientRegistrations(registrations);
     } catch (err) {
+      console.error('❌ Error fetching client memberships:', err);
       setError('Error al cargar tus membresías');
-      console.error('Error fetching client memberships:', err);
     } finally {
       setLoading(false);
     }
@@ -185,10 +187,13 @@ const Memberships: React.FC = () => {
 
   const getTypeColor = (tipo: string) => {
     const colors = {
+      DIARIO: 'bg-orange-100 text-orange-800',
       MENSUAL: 'bg-blue-100 text-blue-800',
       TRIMESTRAL: 'bg-green-100 text-green-800',
       SEMESTRAL: 'bg-yellow-100 text-yellow-800',
       ANUAL: 'bg-purple-100 text-purple-800',
+      ESTUDIANTE: 'bg-cyan-100 text-cyan-800',
+      PREMIUM: 'bg-gold-100 text-gold-800 bg-gradient-to-r from-yellow-200 to-yellow-300',
     };
     return colors[tipo as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
@@ -338,7 +343,7 @@ const Memberships: React.FC = () => {
                 <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTypeColor(membership.tipo)}`}>
                   {membership.tipo}
                 </span>
-                {!membership.estado && (
+                {membership.estado === 0 && (
                   <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
                     Inactiva
                   </span>
@@ -405,7 +410,10 @@ const Memberships: React.FC = () => {
                   <option value="DIARIO">Diario</option>
                   <option value="MENSUAL">Mensual</option>
                   <option value="TRIMESTRAL">Trimestral</option>
+                  <option value="SEMESTRAL">Semestral</option>
                   <option value="ANUAL">Anual</option>
+                  <option value="ESTUDIANTE">Estudiante</option>
+                  <option value="PREMIUM">Premium</option>
                 </select>
               </div>
 
